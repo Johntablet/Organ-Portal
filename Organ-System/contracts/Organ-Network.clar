@@ -154,6 +154,10 @@
   (and (> patient-age-value u0) (< patient-age-value u120))
 )
 
+(define-private (validate-donor-exists (donor-address principal))
+  (is-some (map-get? organ-donor-medical-profiles donor-address))
+)
+
 (define-private (determine-blood-type-compatibility (donor-blood-type uint) (recipient-blood-type uint))
   (or
     ;; Universal donor compatibility (O+ can donate to all blood types)
@@ -229,20 +233,22 @@
     ;; Verify medical system administrator authorization
     (asserts! (is-eq tx-sender medical-system-administrator) ERR-UNAUTHORIZED-ACCESS)
     
-    ;; Retrieve and validate existing donor profile
-    (match (map-get? organ-donor-medical-profiles donor-patient-address)
-      existing-donor-profile
-        (begin
-          ;; Update donor medical clearance information
-          (map-set organ-donor-medical-profiles donor-patient-address
-            (merge existing-donor-profile {
-              medical-clearance-approved: medical-clearance-status,
-              supervising-physician-address: supervising-physician-identifier
-            })
-          )
-          (ok true)
-        )
-      ERR-ORGAN-DONOR-NOT-FOUND
+    ;; Validate donor exists first
+    (asserts! (validate-donor-exists donor-patient-address) ERR-ORGAN-DONOR-NOT-FOUND)
+    
+    ;; Get existing donor profile (we know it exists from validation above)
+    (let
+      (
+        (existing-donor-profile (unwrap-panic (map-get? organ-donor-medical-profiles donor-patient-address)))
+      )
+      ;; Update donor medical clearance information
+      (map-set organ-donor-medical-profiles donor-patient-address
+        (merge existing-donor-profile {
+          medical-clearance-approved: medical-clearance-status,
+          supervising-physician-address: supervising-physician-identifier
+        })
+      )
+      (ok true)
     )
   )
 )
